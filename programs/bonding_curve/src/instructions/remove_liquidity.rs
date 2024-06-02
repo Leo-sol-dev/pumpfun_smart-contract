@@ -3,36 +3,33 @@ use anchor_spl::{
     associated_token::AssociatedToken,
     token::{Mint, Token, TokenAccount},
 };
+use crate::{consts::TOKEN_SELL_LIMIT_PERCENT, errors::CustomError, state::{LiquidityPool, LiquidityPoolAccount}};
 
-use crate::{
-    errors::CustomError,
-    state::{LiquidityPool, LiquidityPoolAccount, LiquidityProvider},
-};
-
-pub fn remove_liquidity(ctx: Context<RemoveLiquidity>, shares: u64) -> Result<()> {
+pub fn remove_liquidity(ctx: Context<RemoveLiquidity>, bump: u8) -> Result<()> {
     let pool = &mut ctx.accounts.pool;
+    if pool.creator.key() != ctx.accounts.user.key() {
+        return Err(CustomError::NotCreator.into());
+    }
 
-    let token_one_accounts = (
-        &mut *ctx.accounts.mint_token_one,
-        &mut *ctx.accounts.pool_token_account_one,
-        &mut *ctx.accounts.user_token_account_one,
-    );
+    // if pool.total_supply.checked_div(10000).ok_or(CustomError::OverflowOrUnderflowOccurred)?
+    // .checked_mul(TOKEN_SELL_LIMIT_PERCENT) > Some(pool.reserve_token) {
+    //     return Err(CustomError::NotEnoughToRemove.into());
+    // }
 
-    let token_two_accounts = (
-        &mut *ctx.accounts.mint_token_two,
-        &mut *ctx.accounts.pool_token_account_two,
-        &mut *ctx.accounts.user_token_account_two,
+    let token_accounts = (
+        &mut *ctx.accounts.token_mint,
+        &mut *ctx.accounts.pool_token_account,
+        &mut *ctx.accounts.user_token_account,
     );
 
     pool.remove_liquidity(
-        token_one_accounts,
-        token_two_accounts,
-        shares,
-        &mut *ctx.accounts.liquidity_provider_account,
+        token_accounts,
+        &mut ctx.accounts.pool_sol_vault,
         &ctx.accounts.user,
+        bump,
         &ctx.accounts.token_program,
+        &ctx.accounts.system_program,
     )?;
-
     Ok(())
 }
 
@@ -40,57 +37,35 @@ pub fn remove_liquidity(ctx: Context<RemoveLiquidity>, shares: u64) -> Result<()
 pub struct RemoveLiquidity<'info> {
     #[account(
         mut,
-        seeds = [LiquidityPool::POOL_SEED_PREFIX.as_bytes(), mint_token_one.key().as_ref(), mint_token_two.key().as_ref()],
+       seeds = [LiquidityPool::POOL_SEED_PREFIX.as_bytes(), token_mint.key().as_ref()],
         bump = pool.bump
     )]
     pub pool: Box<Account<'info, LiquidityPool>>,
 
-    #[account(
-        init_if_needed,
-        payer = user,
-        space = LiquidityProvider::ACCOUNT_SIZE,
-        seeds = [LiquidityProvider::SEED_PREFIX.as_bytes(), pool.key().as_ref(), user.key().as_ref()],
-        bump,
-    )]
-    pub liquidity_provider_account: Box<Account<'info, LiquidityProvider>>,
-
-    #[account(
-        constraint = !mint_token_one.key().eq(&mint_token_two.key()) @ CustomError::DuplicateTokenNotAllowed
-    )]
-    pub mint_token_one: Box<Account<'info, Mint>>,
-
-    #[account(
-        constraint = !mint_token_one.key().eq(&mint_token_two.key()) @ CustomError::DuplicateTokenNotAllowed
-    )]
-    pub mint_token_two: Box<Account<'info, Mint>>,
+    #[account(mut)]
+    pub token_mint: Box<Account<'info, Mint>>,
 
     #[account(
         mut,
-        associated_token::mint = mint_token_one,
+        associated_token::mint = token_mint,
         associated_token::authority = pool
     )]
-    pub pool_token_account_one: Box<Account<'info, TokenAccount>>,
+    pub pool_token_account: Box<Account<'info, TokenAccount>>,
 
     #[account(
         mut,
-        associated_token::mint = mint_token_two,
-        associated_token::authority = pool
-    )]
-    pub pool_token_account_two: Box<Account<'info, TokenAccount>>,
-
-    #[account(
-        mut,
-        associated_token::mint = mint_token_one,
+        associated_token::mint = token_mint,
         associated_token::authority = user,
     )]
-    pub user_token_account_one: Box<Account<'info, TokenAccount>>,
+    pub user_token_account: Box<Account<'info, TokenAccount>>,
 
+    /// CHECK:
     #[account(
         mut,
-        associated_token::mint = mint_token_two,
-        associated_token::authority = user,
+        seeds = [LiquidityPool::SOL_VAULT_PREFIX.as_bytes(), token_mint.key().as_ref()],
+        bump
     )]
-    pub user_token_account_two: Box<Account<'info, TokenAccount>>,
+    pub pool_sol_vault: AccountInfo<'info>,
 
     #[account(mut)]
     pub user: Signer<'info>,

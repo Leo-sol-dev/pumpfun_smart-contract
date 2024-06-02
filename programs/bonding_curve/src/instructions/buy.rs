@@ -4,20 +4,21 @@ use anchor_spl::{
     token::{Mint, Token, TokenAccount},
 };
 
-use crate::state::{LiquidityPool, LiquidityPoolAccount};
+use crate::state::{CurveConfiguration, LiquidityPool, LiquidityPoolAccount};
 
-pub fn add_liquidity(ctx: Context<AddLiquidity>) -> Result<()> {
+pub fn buy(ctx: Context<Buy>, amount: u64) -> Result<()> {
     let pool = &mut ctx.accounts.pool;
 
-    let token_accounts = (
+    let token_one_accounts = (
         &mut *ctx.accounts.token_mint,
         &mut *ctx.accounts.pool_token_account,
         &mut *ctx.accounts.user_token_account,
     );
 
-    pool.add_liquidity(
-        token_accounts,
+    pool.buy(
+        token_one_accounts,
         &mut ctx.accounts.pool_sol_vault,
+        amount,
         &ctx.accounts.user,
         &ctx.accounts.token_program,
         &ctx.accounts.system_program,
@@ -26,13 +27,20 @@ pub fn add_liquidity(ctx: Context<AddLiquidity>) -> Result<()> {
 }
 
 #[derive(Accounts)]
-pub struct AddLiquidity<'info> {
+pub struct Buy<'info> {
+    #[account(
+        mut,
+        seeds = [CurveConfiguration::SEED.as_bytes()],
+        bump,
+    )]
+    pub dex_configuration_account: Box<Account<'info, CurveConfiguration>>,
+
     #[account(
         mut,
         seeds = [LiquidityPool::POOL_SEED_PREFIX.as_bytes(), token_mint.key().as_ref()],
-        bump
+        bump = pool.bump
     )]
-    pub pool: Account<'info, LiquidityPool>,
+    pub pool: Box<Account<'info, LiquidityPool>>,
 
     #[account(mut)]
     pub token_mint: Box<Account<'info, Mint>>,
@@ -44,13 +52,6 @@ pub struct AddLiquidity<'info> {
     )]
     pub pool_token_account: Box<Account<'info, TokenAccount>>,
 
-    #[account(
-        mut,
-        associated_token::mint = token_mint,
-        associated_token::authority = user,
-    )]
-    pub user_token_account: Box<Account<'info, TokenAccount>>,
-
     /// CHECK:
     #[account(
         mut,
@@ -58,6 +59,14 @@ pub struct AddLiquidity<'info> {
         bump
     )]
     pub pool_sol_vault: AccountInfo<'info>,
+
+    #[account(
+        init_if_needed,
+        payer = user,
+        associated_token::mint = token_mint,
+        associated_token::authority = user,
+    )]
+    pub user_token_account: Box<Account<'info, TokenAccount>>,
 
     #[account(mut)]
     pub user: Signer<'info>,
