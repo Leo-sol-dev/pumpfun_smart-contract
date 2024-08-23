@@ -10,11 +10,9 @@ Raydium integration part is omitted for some reason, since this logic is used wi
 
 If you need help or assistance with this project, contact here.
 
-Twitter: [@Rabnail](https://twitter.com/Rabnail_SOL) 
 
-https://twitter.com/Rabnail_SOL
 
-Telegram: [@Rabnail](https://t.me/rab_nail)
+Telegram: [@Aragorn](https://t.me/aragorn_sol)
 
-https://t.me/rab_nail
+https://t.me/aragorn_sol
 
